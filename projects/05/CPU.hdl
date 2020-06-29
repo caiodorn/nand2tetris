@@ -39,5 +39,50 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
+		
+		Not(in=instruction[15], out=isAInstr);
+		Mux16(a=aluOut, b=instruction, sel=isAInstr, out=outMOrInst);
+		
+		Or(a=isAInstr, b=instruction[5], out=storeAReg);
+		ARegister(in=outMOrInst, load=storeAReg, out=aRegOut, out[0..14]=addressM);
+		
+		And(a=instruction[15], b=instruction[4], out=storeDreg);
+		DRegister(in=aluOut, load=storeDreg, out=dRegOut);
+		
+		And(a=instruction[15], b=instruction[12], out=selAM);
+		Mux16(a=aRegOut, b=inM, sel=selAM, out=aOrM);
+		
+		And(a=instruction[15], b=instruction[3], out=writeM);
+		
+		ALU(x=dRegOut, y=aOrM, 
+			zx=instruction[11], 
+			nx=instruction[10], 
+			zy=instruction[9], 
+			ny=instruction[8], 
+			f=instruction[7], 
+			no=instruction[6], 
+			out=outM, out=aluOut,
+			zr=isAluOutEqzr,  											// true if eq 0
+			ng=isAluOutLtzr); 											// true if < 0
+		
+		// PC computations	
+		// jump, can't be A-instr (see page 69)
+		And(a=instruction[15], b=instruction[0], out=j3);
+		And(a=instruction[15], b=instruction[1], out=j2);
+		And(a=instruction[15], b=instruction[2], out=j1);
+		
+		// all possible values for zr/ng ALU outputs
+		Not(in=isAluOutEqzr, out=isAluOutNzr); 					 		// true if not zero
+		Not(in=isAluOutLtzr, out=isAluOutGtzr); 				 		// true if greater than zero
+		And(a=isAluOutGtzr, b=isAluOutNzr, out=isAluOutGtzrNzr); 		// true if greater than zero and not zero
+		
+		// jmp/ALU out combinations (again, refer to page 69)
+		And(a=j3, b=isAluOutGtzrNzr, out=JGT);	
+		And(a=j2, b=isAluOutEqzr, out=JEQ);
+		And(a=j1, b=isAluOutLtzr, out=JLT);
+		Or(a=JGT, b=JEQ, out=JGE);
+		Or(a=JLT, b=JGE, out=JMP);
+
+		PC(in=aRegOut, load=JMP, inc=true, reset=reset, out[0..14]=pc); // always increment!
+		
 }
